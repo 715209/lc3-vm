@@ -80,6 +80,21 @@ impl Lc3 {
 
         Ok(())
     }
+
+    /// Extend to 16 bits
+    fn sign_extend(mut x: u16, bit_count: u16) -> u16 {
+        if Self::is_negative(x, bit_count) {
+            x |= u16::MAX << bit_count;
+        }
+
+        x
+    }
+
+    /// Check if negative
+    /// read bit at position (bit_count - 1) since we begin at 0
+    fn is_negative(x: u16, bit_count: u16) -> bool {
+        ((x >> (bit_count - 1)) & 1) == 1
+    }
 }
 
 impl Default for Lc3 {
@@ -106,6 +121,54 @@ struct Register {
     pub r7: u16,
     pub pc: u16,
     pub cond: ConditionalFlag,
+}
+
+impl Register {
+    pub fn set_register(&mut self, register: u16, value: u16) {
+        match register {
+            0 => self.r0 = value,
+            1 => self.r1 = value,
+            2 => self.r2 = value,
+            3 => self.r3 = value,
+            4 => self.r4 = value,
+            5 => self.r5 = value,
+            6 => self.r6 = value,
+            7 => self.r7 = value,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn get_register(&self, register: u16) -> u16 {
+        match register {
+            0 => self.r0,
+            1 => self.r1,
+            2 => self.r2,
+            3 => self.r3,
+            4 => self.r4,
+            5 => self.r5,
+            6 => self.r6,
+            7 => self.r7,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn set_flag(&mut self, r: u16) {
+        let r = self.get_register(r);
+
+        if r == 0 {
+            return self.cond = ConditionalFlag::Zro;
+        }
+
+        if Lc3::is_negative(r, 16) {
+            return self.cond = ConditionalFlag::Neg;
+        }
+
+        self.cond = ConditionalFlag::Pos
+    }
+
+    pub fn increment_pc(&mut self) {
+        self.pc += 1;
+    }
 }
 
 impl Default for Register {
