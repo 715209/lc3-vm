@@ -183,7 +183,7 @@ impl Default for Register {
             r6: 0,
             r7: 0,
             pc: PC_START,
-            cond: ConditionalFlag::Pos,
+            cond: ConditionalFlag::Zro,
         }
     }
 }
