@@ -178,7 +178,8 @@ impl Lc3 {
             let base_r = self.registers.get_register((instruction >> 6) & 0x7);
             self.registers.pc = base_r;
         } else {
-            self.registers.pc += Self::sign_extend(instruction & 0x7FF, 11);
+            let pc_offset = Self::sign_extend(instruction & 0x7FF, 11);
+            self.registers.pc = u16::wrapping_add(self.registers.pc, pc_offset);
         }
     }
 
@@ -195,7 +196,7 @@ impl Lc3 {
         let dr = (instruction >> 9) & 0x7;
         let pc_offset = Self::sign_extend(instruction & 0x1FF, 9);
 
-        let address = self.read_mem(self.registers.pc + pc_offset);
+        let address = self.read_mem(u16::wrapping_add(self.registers.pc, pc_offset));
         let to_be_loaded = self.read_mem(address);
 
         self.registers.set_register(dr, to_be_loaded);
@@ -207,7 +208,7 @@ impl Lc3 {
         let offset = Self::sign_extend(instruction & 0x3F, 6);
         let base_r = self.registers.get_register((instruction >> 6) & 0x7);
 
-        let to_be_loaded = self.read_mem(base_r + offset);
+        let to_be_loaded = self.read_mem(u16::wrapping_add(base_r, offset));
 
         self.registers.set_register(dr, to_be_loaded);
         self.registers.set_cc_flag(dr);
@@ -218,7 +219,7 @@ impl Lc3 {
         let pc_offset = Self::sign_extend(instruction & 0x1FF, 9);
 
         self.registers
-            .set_register(dr, self.registers.pc + pc_offset);
+            .set_register(dr, u16::wrapping_add(self.registers.pc, pc_offset));
     }
 
     pub fn not(&mut self, instruction: u16) {
@@ -234,14 +235,14 @@ impl Lc3 {
         let sr = self.registers.get_register((instruction >> 9) & 0x7);
         let pc_offset = Self::sign_extend(instruction & 0x1FF, 9);
 
-        self.memory[(self.registers.pc + pc_offset) as usize] = sr;
+        self.memory[(u16::wrapping_add(self.registers.pc, pc_offset)) as usize] = sr;
     }
 
     pub fn sti(&mut self, instruction: u16) {
         let sr = self.registers.get_register((instruction >> 9) & 0x7);
         let pc_offset = Self::sign_extend(instruction & 0x1FF, 9);
 
-        let mem_loc = self.read_mem(self.registers.pc + pc_offset);
+        let mem_loc = self.read_mem(u16::wrapping_add(self.registers.pc, pc_offset));
         self.memory[mem_loc as usize] = sr;
     }
 
