@@ -86,12 +86,6 @@ impl Lc3 {
     pub fn run(&mut self) {
         while self.running {
             let instruction = self.memory[self.registers.pc as usize];
-
-            // Not sure if this is needed or I have a bug
-            if instruction == 0 {
-                continue;
-            }
-
             let opcode = Opcode::from(instruction >> 12);
             self.registers.increment_pc();
 
