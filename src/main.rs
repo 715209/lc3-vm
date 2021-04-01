@@ -4,44 +4,14 @@ use std::{
     path::Path,
 };
 
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, NativeEndian, ReadBytesExt};
 
 fn main() -> Result<(), io::Error> {
     println!("Hello, world!");
 
     let mut lc3 = Lc3::default();
     lc3.load_image_file("rogue.obj")?;
-
-    let mut running = true;
-    while running {
-        let instruction = lc3.memory[lc3.registers.pc as usize];
-        dbg!(instruction >> 12);
-        let opcode = Opcode::from(instruction >> 12);
-        println!("{:?}", opcode);
-
-        match opcode {
-            Opcode::Br => {}
-            Opcode::Add => {}
-            Opcode::Ld => {}
-            Opcode::St => {}
-            Opcode::Jsr => {}
-            Opcode::And => {}
-            Opcode::Ldr => {}
-            Opcode::Str => {}
-            Opcode::Rti => {}
-            Opcode::Not => {}
-            Opcode::Ldi => {}
-            Opcode::Sti => {}
-            Opcode::Jmp => {}
-            Opcode::Res => {}
-            Opcode::Lea => {}
-            Opcode::Trap => {
-                running = false;
-            }
-        }
-
-        lc3.registers.pc += 1;
-    }
+    lc3.run();
 
     Ok(())
 }
@@ -53,6 +23,7 @@ const PC_START: u16 = 0x3000;
 struct Lc3 {
     memory: [u16; 65_536],
     registers: Register,
+    running: bool,
 }
 
 impl Lc3 {
@@ -95,6 +66,242 @@ impl Lc3 {
     fn is_negative(x: u16, bit_count: u16) -> bool {
         ((x >> (bit_count - 1)) & 1) == 1
     }
+
+    pub fn read_mem(&self, address: u16) -> u16 {
+        self.memory[address as usize]
+    }
+
+    pub fn run(&mut self) {
+        while self.running {
+            let instruction = self.memory[self.registers.pc as usize];
+
+            // Not sure if this is needed or I have a bug
+            if instruction == 0 {
+                continue;
+            }
+
+            let opcode = Opcode::from(instruction >> 12);
+            self.registers.increment_pc();
+
+            // println!("Opcode: {:?}, Instruction: {:b}", opcode, instruction);
+
+            match opcode {
+                Opcode::Add => self.add(instruction),
+                Opcode::And => self.and(instruction),
+                Opcode::Br => self.br(instruction),
+                Opcode::Jmp => self.jmp(instruction),
+                Opcode::Jsr => self.jsr(instruction),
+                Opcode::Ld => self.ld(instruction),
+                Opcode::Ldi => self.ldi(instruction),
+                Opcode::Ldr => self.ldr(instruction),
+                Opcode::Lea => self.lea(instruction),
+                Opcode::Not => self.not(instruction),
+                Opcode::Res => unimplemented!(),
+                Opcode::Rti => unimplemented!(),
+                Opcode::St => self.st(instruction),
+                Opcode::Sti => self.sti(instruction),
+                Opcode::Str => self.str_ignore(instruction),
+                Opcode::Trap => self.trap(instruction),
+            }
+        }
+    }
+}
+
+impl Lc3 {
+    pub fn add(&mut self, instruction: u16) {
+        let dr = (instruction >> 9) & 0x7;
+        let sr1 = self.registers.get_register((instruction >> 6) & 0x7);
+        let is_imm_flag = (instruction >> 6) & 0x1 == 1;
+
+        if is_imm_flag {
+            let imm5 = Self::sign_extend(instruction & 0x1F, 5);
+            self.registers
+                .set_register(dr, u16::wrapping_add(sr1, imm5));
+        } else {
+            let sr2 = self.registers.get_register(instruction & 0x7);
+            self.registers.set_register(dr, u16::wrapping_add(sr1, sr2));
+        }
+
+        self.registers.set_cc_flag(dr);
+    }
+
+    pub fn and(&mut self, instruction: u16) {
+        let dr = (instruction >> 9) & 0x7;
+        let sr1 = self.registers.get_register((instruction >> 6) & 0x7);
+        let is_imm_flag = (instruction >> 6) & 0x1 == 1;
+
+        if is_imm_flag {
+            let imm5 = Self::sign_extend(instruction & 0x1F, 5);
+            self.registers.set_register(dr, sr1 & imm5);
+        } else {
+            let sr2 = self.registers.get_register(instruction & 0x7);
+            self.registers.set_register(dr, sr1 & sr2);
+        }
+
+        self.registers.set_cc_flag(dr);
+    }
+
+    pub fn br(&mut self, instruction: u16) {
+        let nzp = (instruction >> 9) & 0x7;
+        let cond = self.registers.cond as u16;
+        let pc_offset = Self::sign_extend(instruction & 0x1FF, 9);
+
+        if nzp & cond != 0 {
+            self.registers.pc = u16::wrapping_add(self.registers.pc, pc_offset);
+        }
+    }
+
+    /// JMP also contains RET
+    pub fn jmp(&mut self, instruction: u16) {
+        let base_r = self.registers.get_register((instruction >> 6) & 0x7);
+        self.registers.pc = base_r;
+    }
+
+    /// JSR also contains JSRR
+    pub fn jsr(&mut self, instruction: u16) {
+        let flag = (instruction >> 11) & 0x1;
+        self.registers.set_register(7, self.registers.pc);
+
+        if flag == 0 {
+            let base_r = self.registers.get_register((instruction >> 6) & 0x7);
+            self.registers.pc = base_r;
+        } else {
+            self.registers.pc += Self::sign_extend(instruction & 0x7FF, 11);
+        }
+    }
+
+    pub fn ld(&mut self, instruction: u16) {
+        let dr = (instruction >> 9) & 0x7;
+        let pc_offset = Self::sign_extend(instruction & 0x1FF, 9);
+        let to_be_loaded = self.read_mem(u16::wrapping_add(self.registers.pc, pc_offset));
+
+        self.registers.set_register(dr, to_be_loaded);
+        self.registers.set_cc_flag(dr);
+    }
+
+    pub fn ldi(&mut self, instruction: u16) {
+        let dr = (instruction >> 9) & 0x7;
+        let pc_offset = Self::sign_extend(instruction & 0x1FF, 9);
+
+        let address = self.read_mem(self.registers.pc + pc_offset);
+        let to_be_loaded = self.read_mem(address);
+
+        self.registers.set_register(dr, to_be_loaded);
+        self.registers.set_cc_flag(dr);
+    }
+
+    pub fn ldr(&mut self, instruction: u16) {
+        let dr = (instruction >> 9) & 0x7;
+        let offset = Self::sign_extend(instruction & 0x3F, 6);
+        let base_r = self.registers.get_register((instruction >> 6) & 0x7);
+
+        let to_be_loaded = self.read_mem(base_r + offset);
+
+        self.registers.set_register(dr, to_be_loaded);
+        self.registers.set_cc_flag(dr);
+    }
+
+    pub fn lea(&mut self, instruction: u16) {
+        let dr = (instruction >> 9) & 0x7;
+        let pc_offset = Self::sign_extend(instruction & 0x1FF, 9);
+
+        self.registers
+            .set_register(dr, self.registers.pc + pc_offset);
+    }
+
+    pub fn not(&mut self, instruction: u16) {
+        let dr = (instruction >> 9) & 0x7;
+        let sr = (instruction >> 6) & 0x7;
+
+        self.registers
+            .set_register(dr, !self.registers.get_register(sr));
+        self.registers.set_cc_flag(dr);
+    }
+
+    pub fn st(&mut self, instruction: u16) {
+        let sr = self.registers.get_register((instruction >> 9) & 0x7);
+        let pc_offset = Self::sign_extend(instruction & 0x1FF, 9);
+
+        self.memory[(self.registers.pc + pc_offset) as usize] = sr;
+    }
+
+    pub fn sti(&mut self, instruction: u16) {
+        let sr = self.registers.get_register((instruction >> 9) & 0x7);
+        let pc_offset = Self::sign_extend(instruction & 0x1FF, 9);
+
+        let mem_loc = self.read_mem(self.registers.pc + pc_offset);
+        self.memory[mem_loc as usize] = sr;
+    }
+
+    pub fn str_ignore(&mut self, instruction: u16) {
+        let sr = self.registers.get_register((instruction >> 9) & 0x7);
+        let base_r = self.registers.get_register((instruction >> 6) & 0x7);
+        let offset = Self::sign_extend(instruction & 0x3F, 6);
+
+        // Seems to overflow
+        let loc = u16::wrapping_add(base_r, offset);
+        self.memory[loc as usize] = sr;
+    }
+
+    pub fn trap(&mut self, instruction: u16) {
+        self.registers.set_register(7, self.registers.pc);
+
+        let trap = Trap::from(instruction & 0xFF);
+        println!("TRAP: {:?}", trap);
+
+        // TODO: Better stdin reading
+        // and find a way to convert u16 to a char or string
+        match trap {
+            Trap::Getc => {
+                // read a single ASCII char
+                let ascii_char = io::stdin().read_u16::<NativeEndian>().unwrap();
+                self.registers.set_register(0, ascii_char);
+            }
+            Trap::Out => {
+                let loc = self.registers.get_register(0);
+                // TODO: Fix this
+                print!("{}", String::from_utf16(&[loc]).unwrap());
+            }
+            Trap::Puts => {
+                let mut loc = self.registers.get_register(0) as usize;
+
+                while self.memory[loc] != 0x0000 {
+                    let character = self.memory[loc];
+                    // TODO: Fix this
+                    print!("{}", String::from_utf16(&[character]).unwrap());
+
+                    loc += 1;
+                }
+
+                let _ = std::io::stdout().flush();
+            }
+            Trap::In => {
+                print!("Enter a character: ");
+                let ascii_char = io::stdin().read_u16::<NativeEndian>().unwrap();
+                println!("{}", ascii_char);
+                self.registers.set_register(0, ascii_char);
+            }
+            Trap::Putsp => {
+                let mut loc = self.registers.get_register(0) as usize;
+
+                while self.memory[loc] != 0x0000 {
+                    let char1 = String::from_utf16(&[self.memory[loc] & 0xFF]).unwrap();
+                    println!("{}", char1);
+
+                    let char2 = String::from_utf16(&[self.memory[loc] >> 8]).unwrap();
+                    println!("{}", char2);
+
+                    loc += 1;
+                }
+
+                let _ = std::io::stdout().flush();
+            }
+            Trap::Halt => {
+                println!("HALT");
+                self.running = false;
+            }
+        }
+    }
 }
 
 impl Default for Lc3 {
@@ -102,6 +309,7 @@ impl Default for Lc3 {
         Self {
             memory: [0; 65_536],
             registers: Register::default(),
+            running: true,
         }
     }
 }
@@ -152,7 +360,7 @@ impl Register {
         }
     }
 
-    pub fn set_flag(&mut self, r: u16) {
+    pub fn set_cc_flag(&mut self, r: u16) {
         let r = self.get_register(r);
 
         if r == 0 {
@@ -188,7 +396,7 @@ impl Default for Register {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum ConditionalFlag {
     /// P
     Pos = 1 << 0,
@@ -253,6 +461,36 @@ impl From<u16> for Opcode {
             13 => Opcode::Res,
             14 => Opcode::Lea,
             15 => Opcode::Trap,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum Trap {
+    /// get character from keyboard, not echoed onto the terminal
+    Getc = 0x20,
+    /// output a character
+    Out = 0x21,
+    /// output a word string
+    Puts = 0x22,
+    /// get character from keyboard, echoed onto the terminal
+    In = 0x23,
+    /// output a byte string
+    Putsp = 0x24,
+    /// halt the program
+    Halt = 0x25,
+}
+
+impl From<u16> for Trap {
+    fn from(trap: u16) -> Self {
+        match trap {
+            0x20 => Trap::Getc,
+            0x21 => Trap::Out,
+            0x22 => Trap::Puts,
+            0x23 => Trap::In,
+            0x24 => Trap::Putsp,
+            0x25 => Trap::Halt,
             _ => unreachable!(),
         }
     }
