@@ -271,16 +271,14 @@ impl Lc3 {
             }
             Trap::Out => {
                 let loc = self.registers.get_register(0);
-                // TODO: Fix this
-                print!("{}", String::from_utf16(&[loc]).unwrap());
+                print!("{}", (loc as u8) as char);
             }
             Trap::Puts => {
                 let mut loc = self.registers.get_register(0) as usize;
 
                 while self.memory[loc] != 0x0000 {
-                    let character = self.memory[loc];
-                    // TODO: Fix this
-                    print!("{}", String::from_utf16(&[character]).unwrap());
+                    let character = (self.memory[loc] as u8) as char;
+                    print!("{}", character);
 
                     loc += 1;
                 }
@@ -297,11 +295,11 @@ impl Lc3 {
                 let mut loc = self.registers.get_register(0) as usize;
 
                 while self.memory[loc] != 0x0000 {
-                    let char1 = String::from_utf16(&[self.memory[loc] & 0xFF]).unwrap();
-                    println!("{}", char1);
+                    let char1 = ((self.memory[loc] & 0xFF) as u8) as char;
+                    print!("{}", char1);
 
-                    let char2 = String::from_utf16(&[self.memory[loc] >> 8]).unwrap();
-                    println!("{}", char2);
+                    let char2 = ((self.memory[loc] >> 8) as u8) as char;
+                    print!("{}", char2);
 
                     loc += 1;
                 }
