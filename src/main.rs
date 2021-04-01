@@ -67,7 +67,19 @@ impl Lc3 {
         ((x >> (bit_count - 1)) & 1) == 1
     }
 
-    pub fn read_mem(&self, address: u16) -> u16 {
+    pub fn read_mem(&mut self, address: u16) -> u16 {
+        if address == MemoryMappedRegisters::Kbsr as u16 {
+            let mut buffer = [0; 1];
+            std::io::stdin().read_exact(&mut buffer).unwrap();
+
+            if buffer[0] != 0 {
+                self.memory[MemoryMappedRegisters::Kbsr as usize] = 1 << 15;
+                self.memory[MemoryMappedRegisters::Kbdr as usize] = buffer[0] as u16;
+            } else {
+                self.memory[MemoryMappedRegisters::Kbsr as usize] = 0;
+            }
+        }
+
         self.memory[address as usize]
     }
 
@@ -494,4 +506,11 @@ impl From<u16> for Trap {
             _ => unreachable!(),
         }
     }
+}
+
+enum MemoryMappedRegisters {
+    /// Keyboard status
+    Kbsr = 0xFE00,
+    /// Keyboard data
+    Kbdr = 0xFE02,
 }
