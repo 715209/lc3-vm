@@ -112,7 +112,7 @@ impl Lc3 {
                 Opcode::Rti => unimplemented!(),
                 Opcode::St => self.st(instruction),
                 Opcode::Sti => self.sti(instruction),
-                Opcode::Str => self.str_ignore(instruction),
+                Opcode::Str => self.op_str(instruction),
                 Opcode::Trap => self.trap(instruction),
             }
         }
@@ -245,12 +245,11 @@ impl Lc3 {
         self.memory[mem_loc as usize] = sr;
     }
 
-    pub fn str_ignore(&mut self, instruction: u16) {
+    pub fn op_str(&mut self, instruction: u16) {
         let sr = self.registers.get_register((instruction >> 9) & 0x7);
         let base_r = self.registers.get_register((instruction >> 6) & 0x7);
         let offset = Self::sign_extend(instruction & 0x3F, 6);
 
-        // Seems to overflow
         let loc = u16::wrapping_add(base_r, offset);
         self.memory[loc as usize] = sr;
     }
