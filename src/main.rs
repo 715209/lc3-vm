@@ -117,7 +117,7 @@ impl Lc3 {
     pub fn add(&mut self, instruction: u16) {
         let dr = (instruction >> 9) & 0x7;
         let sr1 = self.registers.get_register((instruction >> 6) & 0x7);
-        let is_imm_flag = (instruction >> 6) & 0x1 == 1;
+        let is_imm_flag = (instruction >> 5) & 0x1 == 1;
 
         if is_imm_flag {
             let imm5 = Self::sign_extend(instruction & 0x1F, 5);
