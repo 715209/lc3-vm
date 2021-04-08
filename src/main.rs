@@ -5,8 +5,6 @@ use std::{
     path::Path,
 };
 
-use byteorder::{BigEndian, ReadBytesExt};
-
 fn main() -> Result<(), io::Error> {
     let args: Vec<String> = env::args().collect();
 
@@ -48,14 +46,23 @@ impl Lc3 {
     where
         R: Read,
     {
-        let mut origin = reader.read_u16::<BigEndian>()? as usize;
+        let mut origin = Self::read_u16_be(&mut reader)? as usize;
 
-        while let Ok(p) = reader.read_u16::<BigEndian>() {
+        while let Ok(p) = Self::read_u16_be(&mut reader) {
             self.memory[origin] = p;
             origin += 1;
         }
 
         Ok(())
+    }
+
+    pub fn read_u16_be<R>(mut reader: R) -> io::Result<u16>
+    where
+        R: Read,
+    {
+        let mut buf = [0; 2];
+        reader.read_exact(&mut buf)?;
+        Ok(u16::from_be_bytes(buf))
     }
 
     /// Extend to 16 bits
