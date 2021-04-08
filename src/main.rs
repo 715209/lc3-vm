@@ -4,11 +4,9 @@ use std::{
     path::Path,
 };
 
-use byteorder::{BigEndian, NativeEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt};
 
 fn main() -> Result<(), io::Error> {
-    println!("Hello, world!");
-
     let mut lc3 = Lc3::default();
     lc3.load_image_file("rogue.obj")?;
     lc3.run();
@@ -69,12 +67,11 @@ impl Lc3 {
 
     pub fn read_mem(&mut self, address: u16) -> u16 {
         if address == MemoryMappedRegisters::Kbsr as u16 {
-            let mut buffer = [0; 1];
-            std::io::stdin().read_exact(&mut buffer).unwrap();
+            let character = Self::read_char();
 
-            if buffer[0] != 0 {
+            if character != 0 {
                 self.memory[MemoryMappedRegisters::Kbsr as usize] = 1 << 15;
-                self.memory[MemoryMappedRegisters::Kbdr as usize] = buffer[0] as u16;
+                self.memory[MemoryMappedRegisters::Kbdr as usize] = character;
             } else {
                 self.memory[MemoryMappedRegisters::Kbsr as usize] = 0;
             }
@@ -83,13 +80,21 @@ impl Lc3 {
         self.memory[address as usize]
     }
 
+    /// read a single ASCII char
+    pub fn read_char() -> u16 {
+        let mut buffer = [0; 1];
+        std::io::stdin().read_exact(&mut buffer).unwrap();
+
+        buffer[0] as u16
+    }
+
     pub fn run(&mut self) {
         while self.running {
             let instruction = self.memory[self.registers.pc as usize];
             let opcode = Opcode::from(instruction >> 12);
             self.registers.increment_pc();
 
-            // println!("Opcode: {:?}, Instruction: {:b}", opcode, instruction);
+            //println!("Opcode: {:?}, Instruction: {:b}", opcode, instruction);
 
             match opcode {
                 Opcode::Add => self.add(instruction),
@@ -254,19 +259,16 @@ impl Lc3 {
         self.registers.set_register(7, self.registers.pc);
 
         let trap = Trap::from(instruction & 0xFF);
-        println!("TRAP: {:?}", trap);
+        // println!("TRAP: {:?}", trap);
 
-        // TODO: Better stdin reading
-        // and find a way to convert u16 to a char or string
         match trap {
             Trap::Getc => {
-                // read a single ASCII char
-                let ascii_char = io::stdin().read_u16::<NativeEndian>().unwrap();
-                self.registers.set_register(0, ascii_char);
+                self.registers.set_register(0, Self::read_char());
             }
             Trap::Out => {
                 let loc = self.registers.get_register(0);
                 print!("{}", (loc as u8) as char);
+                let _ = std::io::stdout().flush();
             }
             Trap::Puts => {
                 let mut loc = self.registers.get_register(0) as usize;
@@ -282,7 +284,7 @@ impl Lc3 {
             }
             Trap::In => {
                 print!("Enter a character: ");
-                let ascii_char = io::stdin().read_u16::<NativeEndian>().unwrap();
+                let ascii_char = Self::read_char();
                 println!("{}", ascii_char);
                 self.registers.set_register(0, ascii_char);
             }
