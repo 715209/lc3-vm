@@ -71,6 +71,7 @@ impl Lc3 {
     }
 
     /// Extend to 16 bits
+    #[inline]
     fn sign_extend(mut x: u16, bit_count: u16) -> u16 {
         if Self::is_negative(x, bit_count) {
             x |= u16::MAX << bit_count;
@@ -81,6 +82,7 @@ impl Lc3 {
 
     /// Check if negative
     /// read bit at position (bit_count - 1) since we begin at 0
+    #[inline]
     fn is_negative(x: u16, bit_count: u16) -> bool {
         ((x >> (bit_count - 1)) & 1) == 1
     }
@@ -324,7 +326,7 @@ impl Lc3 {
                 let _ = std::io::stdout().flush();
             }
             Trap::Halt => {
-                println!("HALT");
+                // println!("HALT");
                 self.running = false;
             }
         }
@@ -401,6 +403,7 @@ impl Register {
         self.cond = ConditionalFlag::Pos
     }
 
+    #[inline]
     pub fn increment_pc(&mut self) {
         self.pc += 1;
     }
